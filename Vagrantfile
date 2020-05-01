@@ -1,18 +1,19 @@
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
 
-IMAGE_NAME = "bento/ubuntu-16.04"
+IMAGE_NAME = "bento/ubuntu-18.04"
 N = 2
+NUMOFTENANTS=2
 
 Vagrant.configure("2") do |config|
 
     config.ssh.insert_key = false
 
     config.vm.provider "virtualbox" do |v|
-        v.memory = 1024
+        v.memory = 3072
         v.cpus = 2
     end
-      config.vm.synced_folder "./data", "/vagrant_data" # Mycode
+    config.vm.synced_folder "./data", "/vagrant_data" # Mycode
 
     config.vm.define "k8s-master" do |master|
         master.vm.box = IMAGE_NAME
@@ -51,10 +52,10 @@ Vagrant.configure("2") do |config|
 
     config.vm.define "tenants-machine" do |tenant|
         # CHange to 1 core
-        config.vm.provider "virtualbox" do |v|
-            v.memory = 1024
-            v.cpus = 2
-        end
+        # config.vm.provider "virtualbox" do |v|
+        #     v.memory = 1024
+        #     v.cpus = 2
+        # end
 
         config.ssh.forward_agent = true
 
@@ -68,9 +69,13 @@ Vagrant.configure("2") do |config|
         ########################################################################################################3
         #Another solution
         # system("cp ~/workspace/MasterThesis data/ -r")
+        
 
-        tenant.vm.provision "shell", privileged: false, inline: <<-SHELL
-          
+        tenant.vm.provision "ansible" do |ansible|
+            ansible.playbook = "kubernetes-setup/install-docker.yml"
+        end
+        tenant.vm.provision "shell", privileged: false, args: "#{NUMOFTENANTS}", inline: <<-SHELL
+          NUMOFTENANTS=${1:-2}
           sudo apt-get update && sudo apt-get install -y apt-transport-https
           curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
           echo "deb https://apt.kubernetes.io/ kubernetes-xenial main" | sudo tee -a /etc/apt/sources.list.d/kubernetes.list
@@ -80,7 +85,7 @@ Vagrant.configure("2") do |config|
           chmod +x calicoctl
           sudo mv calicoctl /usr/bin/
 
-          export LC_ALL=C
+          export LC_ALL=C  # 
           sudo pip install  pyyaml
           echo "export DATASTORE_TYPE=kubernetes" | sudo tee ~/.bashrc -a
           echo "export KUBECONFIG=$HOME/.kube/config" | sudo tee ~/.bashrc -a
@@ -98,10 +103,27 @@ Vagrant.configure("2") do |config|
           cd MasterThesis
           git checkout -b latest origin/latest
           cd $HOME/MasterThesis/main-test/calico-test/vagrantK8s/
-          chmod u+x run-test-from-sratch.sh
-          yes Y | ./run-test-from-sratch.sh
+          # chmod u+x run-test-from-sratch.sh
+          # yes Y | ./run-test-from-sratch.sh
+          ./all-in-one-deployment.sh ${NUMOFTENANTS}
+          sudo rm ~/.rnd | true # For the openssl "unable to write 'random state'" problem
 
           SHELL
     end
 
+    # config.vm.define "dev" do |dev|
+    #     # CHange to 1 core
+    #     # config.vm.provider "virtualbox" do |v|
+    #     #     v.memory = 1024
+    #     #     v.cpus = 2
+    #     # end
+
+    #     config.ssh.forward_agent = true
+    #     config.ssh.forward_x11 = true
+
+    #     config.vm.synced_folder "./data", "/data" # Mycode
+    #     dev.vm.box = IMAGE_NAME
+    #     dev.vm.network "private_network", ip: "192.168.50.#{N + 2 + 10}"
+    #     dev.vm.hostname = "dev"   
+    # end
 end
