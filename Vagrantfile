@@ -9,10 +9,10 @@ Vagrant.configure("2") do |config|
 
     config.ssh.insert_key = false
 
-    config.vm.provider "virtualbox" do |v|
-        v.memory = 3072
-        v.cpus = 2
-    end
+    # config.vm.provider "virtualbox" do |v|
+    #     v.memory = 3072
+    #     v.cpus = 2
+    # end
     config.vm.synced_folder "./data", "/vagrant_data" # Mycode
 
     config.vm.define "k8s-master" do |master|
@@ -27,9 +27,13 @@ Vagrant.configure("2") do |config|
         end
 
         # My code
+        master.vm.provider "virtualbox" do |v|
+            v.memory = 3072
+            v.cpus = 2
+        end
         config.vm.synced_folder "./data", "/vagrant_data"
         
-
+        # master.vm.network "forwarded_port", guest: 3000, host: 3080
         master.vm.provision "shell", privileged: false, inline: <<-SHELL
           sudo cp -r /etc/kubernetes/pki /vagrant_data/
           sudo cp /home/vagrant/.kube/config /vagrant_data
@@ -47,6 +51,11 @@ Vagrant.configure("2") do |config|
                     node_ip: "192.168.50.#{i + 10}",
                 }
             end
+
+            node.vm.provider "virtualbox" do |v|
+                v.memory = 8196
+                v.cpus = 4
+            end
         end
     end
 
@@ -59,6 +68,10 @@ Vagrant.configure("2") do |config|
 
         config.ssh.forward_agent = true
 
+        tenant.vm.provider "virtualbox" do |v|
+            v.memory = 2048
+            v.cpus = 2
+        end
         tenant.vm.box = IMAGE_NAME
         tenant.vm.network "private_network", ip: "192.168.50.#{N + 1 + 10}"
         tenant.vm.hostname = "tenant-machine"   
@@ -74,6 +87,10 @@ Vagrant.configure("2") do |config|
         tenant.vm.provision "ansible" do |ansible|
             ansible.playbook = "kubernetes-setup/install-docker.yml"
         end
+        tenant.vm.network "forwarded_port", guest: 3000, host: 3000
+        tenant.vm.network "forwarded_port", guest: 8001, host: 8001
+        tenant.ssh.forward_agent = true
+        tenant.ssh.forward_x11 = true
         tenant.vm.provision "shell", privileged: false, args: "#{NUMOFTENANTS}", inline: <<-SHELL
           NUMOFTENANTS=${1:-2}
           sudo apt-get update && sudo apt-get install -y apt-transport-https
@@ -102,11 +119,9 @@ Vagrant.configure("2") do |config|
           git clone git@github.com:namnx228/MasterThesis.git 
           cd MasterThesis
           git checkout -b latest origin/latest
-          cd $HOME/MasterThesis/main-test/calico-test/vagrantK8s/
-          # chmod u+x run-test-from-sratch.sh
-          # yes Y | ./run-test-from-sratch.sh
+          cd $HOME/MasterThesis/main-test/calico-test/multi-tenancy-generator
           ./all-in-one-deployment.sh ${NUMOFTENANTS}
-          sudo rm ~/.rnd | true # For the openssl "unable to write 'random state'" problem
+          sudo rm ~/.rnd || true # For the openssl "unable to write 'random state'" problem
 
           SHELL
     end
